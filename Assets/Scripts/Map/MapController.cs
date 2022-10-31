@@ -78,16 +78,12 @@ public partial class MapController : MonoBehaviour
 
         // Add
         if (Input.GetKeyDown(KeyCode.Q))
-        {
-
             TryAddPointToPath(selectedPointIndex);
-        }
+
         // Remove
         if (Input.GetKeyDown(KeyCode.W))
-        {
             TryRemovePointFromPath(selectedPointIndex);
 
-        }
     }
 
     public void Clean()

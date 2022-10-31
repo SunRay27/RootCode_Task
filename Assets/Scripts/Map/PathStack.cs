@@ -66,5 +66,8 @@ public class PathStack
     {
         pointStack.Clear();
         pointCounts.Clear();
+
+        connectionCounts.Clear();
+        connectionStack.Clear();
     }
 }
