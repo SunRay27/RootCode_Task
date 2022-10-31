@@ -11,17 +11,6 @@ using Random = UnityEngine.Random;
 /// </summary>
 public partial class MapController : MonoBehaviour
 {
-    //day one - 3hr
-    //day two - from 13:00 to ???
-    //STAGES
-    //1. Map and view creation (weights, connections, view) 1hr
-    //2. Map points selection and path construction 1hr
-    //3. Map generation ~
-    //4. Cube movement ~1hr started at 13:00
-    //5. Menuing, stage cycle - finished at 16:40
-    //6. main menu - finished at 17:00
-    //7. clean-up - after 17:00
-
     [SerializeField]
     private ConnectionView connectionPrefab;
 
@@ -43,13 +32,13 @@ public partial class MapController : MonoBehaviour
     private List<MapPoint> allPoints = new List<MapPoint>();
     private List<Connection> connections = new List<Connection>();
 
-    //current path
-    private List<MapPoint> currentPath = new List<MapPoint>();
+    //current path 
+    private PathStack pathStack = new PathStack();
     private int currentPathWeight = 0;
 
     //selected point info
     private MapPointView selectedPointView;
-    private MapPoint selectedPoint;
+    private int selectedPointIndex = -1;
 
     private bool destinationReached = false;
 
@@ -78,18 +67,26 @@ public partial class MapController : MonoBehaviour
                         selectedPointView.OnDeselect();
 
                     selectedPointView = point;
-                    selectedPoint = allPoints[point.MapPointIndex];
+                    selectedPointIndex = point.MapPointIndex;
                     point.OnSelect();
                 }
             }
 
         //add/remove point from current path
-        if (Input.GetKeyDown(KeyCode.Space) && selectedPoint != null)
+        if (selectedPointIndex == -1)
+            return;
+
+        // Add
+        if (Input.GetKeyDown(KeyCode.Q))
         {
-            if (currentPath.Contains(selectedPoint))
-                TryRemovePointFromPath(selectedPoint);
-            else
-                TryAddPointToPath(selectedPoint);
+
+            TryAddPointToPath(selectedPointIndex);
+        }
+        // Remove
+        if (Input.GetKeyDown(KeyCode.W))
+        {
+            TryRemovePointFromPath(selectedPointIndex);
+
         }
     }
 
@@ -101,11 +98,12 @@ public partial class MapController : MonoBehaviour
         foreach (var item in allPoints)
             Destroy(item.view.gameObject);
 
-        currentPath.Clear();
+        pathStack.Clear();
+        //currentPath.Clear();
         connections.Clear();
         allPoints.Clear();
 
-        selectedPoint = null;
+        selectedPointIndex = -1;
         selectedPointView = null;
 
         currentPathWeight = 0;
@@ -120,7 +118,7 @@ public partial class MapController : MonoBehaviour
         LoadConnections();
         InitView();
 
-        AddPointToPath(startPoint);
+        AddPointToPath(allPoints.IndexOf(startPoint));
         SnapPlayerToStart();
 
     }
@@ -173,55 +171,68 @@ public partial class MapController : MonoBehaviour
 
 
     //path manipulations
-    private void TryRemovePointFromPath(MapPoint thisPoint)
+    private void TryRemovePointFromPath(int thisPointIndex)
     {
-        if (currentPath.IndexOf(thisPoint) == currentPath.Count - 1 && currentPath.Count != 1)
-            RemovePointFromPath(thisPoint);
+        if (pathStack.PeekPoint() == thisPointIndex && pathStack.Count != 1)
+            RemovePointFromPath(thisPointIndex);
     }
-    private void TryAddPointToPath(MapPoint thisPoint)
+    private void TryAddPointToPath(int thisPointIndex)
     {
-        if ((currentPath[currentPath.Count - 1].ConnectedPoints.Contains(thisPoint) || thisPoint.ConnectedPoints.Contains(currentPath[currentPath.Count - 1])) && !currentPath.Contains(thisPoint))
-        {
-            AddPointToPath(thisPoint);
+        MapPoint newPoint = allPoints[thisPointIndex];
+        MapPoint lastPoint = allPoints[pathStack.PeekPoint()];
 
-            if (thisPoint == endPoint)
+        if (lastPoint.ConnectedPoints.Contains(newPoint) || newPoint.ConnectedPoints.Contains(lastPoint))
+        {
+            AddPointToPath(thisPointIndex);
+
+            if (newPoint == endPoint)
                 destinationReached = true;
         }
     }
-    private void AddPointToPath(MapPoint point)
+    private void AddPointToPath(int index)
     {
-        if (currentPath.Count == 0)
+        if (pathStack.Count == 0)
         {
-            currentPath.Add(point);
-            point.view.SetColor(Color.green);
+            pathStack.PushPoint(index);
+            allPoints[index].view.SetColor(1);
             return;
         }
 
-        MapPoint lastPathPoint = currentPath[currentPath.Count - 1];
-        Connection connectionToNewPoint = connections.First(i => (i.point1 == lastPathPoint && i.point2 == point) || (i.point2 == lastPathPoint && i.point1 == point));
-
-        //update point/connection view
-        connectionToNewPoint.view.SetColor(Color.green);
-        point.view.SetColor(Color.green);
+        MapPoint newPoint = allPoints[index];
+        MapPoint lastPathPoint = allPoints[pathStack.PeekPoint()];
+        Connection connectionToNewPoint = connections.First(i => (i.point1 == lastPathPoint && i.point2 == newPoint) || (i.point2 == lastPathPoint && i.point1 == newPoint));
+        int connectionIndex = connections.IndexOf(connectionToNewPoint);
 
         currentPathWeight += connectionToNewPoint.weight;
-        currentPath.Add(point);
-
-        //move player to new point
-        playerView.QueueMoveToPosition(point.transform.position);
-
-    }
-    private void RemovePointFromPath(MapPoint point)
-    {
-        MapPoint lastPathPoint = currentPath[currentPath.Count - 2];
-        Connection connectionToOldPoint = connections.First(i => (i.point1 == lastPathPoint && i.point2 == point) || (i.point2 == lastPathPoint && i.point1 == point));
+        pathStack.PushPoint(index);
+        pathStack.PushConnection(connectionIndex);
 
         //update point/connection view
-        connectionToOldPoint.view.SetColor(Color.grey);
-        point.view.SetColor(Color.white);
+        connectionToNewPoint.view.SetColor(pathStack.GetConnectionCount(connectionIndex));
+        newPoint.view.SetColor(pathStack.GetPointCount(index));
+
+
+
+        //move player to new point
+        playerView.QueueMoveToPosition(newPoint.transform.position);
+
+    }
+    private void RemovePointFromPath(int index)
+    {
+        MapPoint pointToDelete = allPoints[pathStack.PopPoint()];
+        MapPoint lastPathPoint = allPoints[pathStack.PeekPoint()];
+        Connection connectionToOldPoint = connections.First(i => (i.point1 == lastPathPoint && i.point2 == pointToDelete) || (i.point2 == lastPathPoint && i.point1 == pointToDelete));
+        int connectionIndex = connections.IndexOf(connectionToOldPoint);
 
         currentPathWeight -= connectionToOldPoint.weight;
-        currentPath.Remove(point);
+        pathStack.PopConnection();
+
+
+        //update point/connection view
+        connectionToOldPoint.view.SetColor(pathStack.GetConnectionCount(connectionIndex));
+        pointToDelete.view.SetColor(pathStack.GetPointCount(index));
+
+
 
         //move player to previous point
         playerView.QueueMoveToPosition(lastPathPoint.transform.position);

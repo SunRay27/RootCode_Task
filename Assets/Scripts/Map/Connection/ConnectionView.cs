@@ -13,6 +13,9 @@ public class ConnectionView : MonoBehaviour
 
     [SerializeField]
     private LineRenderer lineRenderer;
+
+    [SerializeField]
+    private Gradient overlapColorGradient;
     public void Init(Vector3 point1, Vector3 point2, int weight)
     {
         lineRenderer.positionCount = 2;
@@ -22,11 +25,14 @@ public class ConnectionView : MonoBehaviour
         weightText.text = weight.ToString();
         weightText.transform.position = point1 / 2 + point2 / 2;
 
-        SetColor(Color.grey);
+        SetColor(0);
     }
 
-    public void SetColor(Color color)
+    public void SetColor(int overlapCount)
     {
-        lineRenderer.startColor = lineRenderer.endColor = color;
+        // We should restrict selection ability if overlap count is too big
+        const int maxReasonableOverlapCount = 5;
+        float t = overlapCount / (maxReasonableOverlapCount - 1f);
+        lineRenderer.startColor = lineRenderer.endColor = overlapColorGradient.Evaluate(t);
     }
 }
